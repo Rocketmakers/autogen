@@ -49,7 +49,7 @@ def test_web_surfer():
     web_surfer = WebSurferAgent("web_surfer", llm_config=False, browser_config={"viewport_size": page_size})
 
     # Sneak a peak at the function map, allowing us to call the functions for testing here
-    function_map = web_surfer._user_proxy._function_map
+    function_map = web_surfer._user_proxy.function_map
 
     # Test some basic navigations
     response = function_map["visit_page"](BLOG_POST_URL)
@@ -99,10 +99,10 @@ def test_web_surfer():
 def test_web_surfer_oai():
     llm_config = {"config_list": config_list, "timeout": 180, "cache_seed": None}
 
+    model = ["gpt-3.5-turbo-1106", "gpt-3.5-turbo-16k-0613", "gpt-3.5-turbo-16k"]
+    model = model + [m.replace(".", "") for m in model]
     summarizer_llm_config = {
-        "config_list": filter_config(
-            config_list, {"model": ["gpt-3.5-turbo-1106", "gpt-3.5-turbo-16k-0613", "gpt-3.5-turbo-16k"]}
-        ),
+        "config_list": filter_config(config_list, {"model": model}),
         "timeout": 180,
         "cache_seed": None,
     }
@@ -151,7 +151,7 @@ def test_web_surfer_bing():
     )
 
     # Sneak a peak at the function map, allowing us to call the functions for testing here
-    function_map = web_surfer._user_proxy._function_map
+    function_map = web_surfer._user_proxy.function_map
 
     # Test informational queries
     response = function_map["informational_web_search"](BING_QUERY)

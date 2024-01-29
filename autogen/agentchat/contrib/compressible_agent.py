@@ -7,12 +7,7 @@ import logging
 import inspect
 from autogen.token_count_utils import count_token, get_max_token_limit, num_tokens_from_functions
 
-try:
-    from termcolor import colored
-except ImportError:
-
-    def colored(x, *args, **kwargs):
-        return x
+from ...tty_utils import colored
 
 
 logger = logging.getLogger(__name__)
@@ -221,7 +216,7 @@ Reply "TERMINATE" in the end when everything is done.
         if "functions" in self.llm_config:
             func_count = num_tokens_from_functions(self.llm_config["functions"], self.llm_config["model"])
 
-        return func_count + count_token(self._oai_system_message, self.llm_config["model"])
+        return func_count + count_token(self._llm._oai_system_messages, self.llm_config["model"])
 
     def _manage_history_on_token_limit(self, messages, token_used, max_token_allowed, model):
         """Manage the message history with different modes when token limit is reached.

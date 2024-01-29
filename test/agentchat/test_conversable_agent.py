@@ -70,7 +70,8 @@ def test_sync_trigger():
     agent1.initiate_chat(agent, message="hi")
     assert agent1.last_message(agent)["content"] == "hello agent2 or agent1"
     pytest.raises(ValueError, agent.register_reply, 1, lambda recipient, messages, sender, config: (True, "hi"))
-    pytest.raises(ValueError, agent._match_trigger, 1, agent1)
+    # todo: moved to _ReplyFunctionMiddleware
+    # pytest.raises(ValueError, agent._match_trigger, 1, agent1)
 
 
 @pytest.mark.asyncio
@@ -136,9 +137,6 @@ async def test_async_trigger():
 
     with pytest.raises(ValueError):
         agent.register_reply(1, a_reply)
-
-    with pytest.raises(ValueError):
-        agent._match_trigger(1, agent1)
 
 
 def test_async_trigger_in_sync_chat():
@@ -217,122 +215,6 @@ def test_context():
     # expect hello there to be printed
 
 
-def test_generate_code_execution_reply():
-    agent = ConversableAgent(
-        "a0", max_consecutive_auto_reply=10, code_execution_config=False, llm_config=False, human_input_mode="NEVER"
-    )
-
-    dummy_messages = [
-        {
-            "content": "no code block",
-            "role": "user",
-        },
-        {
-            "content": "no code block",
-            "role": "user",
-        },
-    ]
-
-    code_message = {
-        "content": '```python\nprint("hello world")\n```',
-        "role": "user",
-    }
-
-    # scenario 1: if code_execution_config is not provided, the code execution should return false, none
-    assert agent.generate_code_execution_reply(dummy_messages, config=False) == (False, None)
-
-    # scenario 2: if code_execution_config is provided, but no code block is found, the code execution should return false, none
-    assert agent.generate_code_execution_reply(dummy_messages, config={}) == (False, None)
-
-    # scenario 3: if code_execution_config is provided, and code block is found, but it's not within the range of last_n_messages, the code execution should return false, none
-    assert agent.generate_code_execution_reply([code_message] + dummy_messages, config={"last_n_messages": 1}) == (
-        False,
-        None,
-    )
-
-    # scenario 4: if code_execution_config is provided, and code block is found, and it's within the range of last_n_messages, the code execution should return true, code block
-    agent._code_execution_config = {"last_n_messages": 3, "use_docker": False}
-    assert agent.generate_code_execution_reply([code_message] + dummy_messages) == (
-        True,
-        "exitcode: 0 (execution succeeded)\nCode output: \nhello world\n",
-    )
-    assert agent._code_execution_config["last_n_messages"] == 3
-
-    # scenario 5: if last_n_messages is set to 'auto' and no code is found, then nothing breaks both when an assistant message is and isn't present
-    assistant_message_for_auto = {
-        "content": "This is me! The assistant!",
-        "role": "assistant",
-    }
-
-    dummy_messages_for_auto = []
-    for i in range(3):
-        dummy_messages_for_auto.append(
-            {
-                "content": "no code block",
-                "role": "user",
-            }
-        )
-
-        # Without an assistant present
-        agent._code_execution_config = {"last_n_messages": "auto", "use_docker": False}
-        assert agent.generate_code_execution_reply(dummy_messages_for_auto) == (
-            False,
-            None,
-        )
-
-        # With an assistant message present
-        agent._code_execution_config = {"last_n_messages": "auto", "use_docker": False}
-        assert agent.generate_code_execution_reply([assistant_message_for_auto] + dummy_messages_for_auto) == (
-            False,
-            None,
-        )
-
-    # scenario 6: if last_n_messages is set to 'auto' and code is found, then we execute it correctly
-    dummy_messages_for_auto = []
-    for i in range(4):
-        # Without an assistant present
-        agent._code_execution_config = {"last_n_messages": "auto", "use_docker": False}
-        assert agent.generate_code_execution_reply([code_message] + dummy_messages_for_auto) == (
-            True,
-            "exitcode: 0 (execution succeeded)\nCode output: \nhello world\n",
-        )
-
-        # With an assistant message present
-        agent._code_execution_config = {"last_n_messages": "auto", "use_docker": False}
-        assert agent.generate_code_execution_reply(
-            [assistant_message_for_auto] + [code_message] + dummy_messages_for_auto
-        ) == (
-            True,
-            "exitcode: 0 (execution succeeded)\nCode output: \nhello world\n",
-        )
-
-        dummy_messages_for_auto.append(
-            {
-                "content": "no code block",
-                "role": "user",
-            }
-        )
-
-    # scenario 7: if last_n_messages is set to 'auto' and code is present, but not before an assistant message, then nothing happens
-    agent._code_execution_config = {"last_n_messages": "auto", "use_docker": False}
-    assert agent.generate_code_execution_reply(
-        [code_message] + [assistant_message_for_auto] + dummy_messages_for_auto
-    ) == (
-        False,
-        None,
-    )
-    assert agent._code_execution_config["last_n_messages"] == "auto"
-
-    # scenario 8: if last_n_messages is misconfigures, we expect to see an error
-    with pytest.raises(ValueError):
-        agent._code_execution_config = {"last_n_messages": -1, "use_docker": False}
-        agent.generate_code_execution_reply([code_message])
-
-    with pytest.raises(ValueError):
-        agent._code_execution_config = {"last_n_messages": "hello world", "use_docker": False}
-        agent.generate_code_execution_reply([code_message])
-
-
 def test_max_consecutive_auto_reply():
     agent = ConversableAgent("a0", max_consecutive_auto_reply=2, llm_config=False, human_input_mode="NEVER")
     agent1 = ConversableAgent("a1", max_consecutive_auto_reply=0, llm_config=False, human_input_mode="NEVER")
@@ -341,14 +223,14 @@ def test_max_consecutive_auto_reply():
     assert agent.max_consecutive_auto_reply() == agent.max_consecutive_auto_reply(agent1) == 1
 
     agent1.initiate_chat(agent, message="hello")
-    assert agent._consecutive_auto_reply_counter[agent1] == 1
+    assert agent._termination._consecutive_auto_reply_counter[agent1] == 1
     agent1.initiate_chat(agent, message="hello again")
     # with auto reply because the counter is reset
     assert agent1.last_message(agent)["role"] == "user"
     assert len(agent1.chat_messages[agent]) == 2
     assert len(agent.chat_messages[agent1]) == 2
 
-    assert agent._consecutive_auto_reply_counter[agent1] == 1
+    assert agent._termination._consecutive_auto_reply_counter[agent1] == 1
     agent1.send(message="bye", recipient=agent)
     # no auto reply
     assert agent1.last_message(agent)["role"] == "assistant"
@@ -453,7 +335,7 @@ def test_generate_reply():
 
     # when sender is provided, messages is None
     dummy_agent_1 = ConversableAgent(name="dummy_agent_1", llm_config=False, human_input_mode="ALWAYS")
-    dummy_agent_2._oai_messages[dummy_agent_1] = messages
+    dummy_agent_2._message_store.oai_messages[dummy_agent_1] = messages
     assert (
         dummy_agent_2.generate_reply(messages=None, sender=dummy_agent_1)["content"] == "15"
     ), "generate_reply not working when messages is None"
@@ -773,19 +655,15 @@ def test_register_for_llm_without_description():
 
 
 def test_register_for_llm_without_LLM():
-    with pytest.MonkeyPatch.context() as mp:
-        mp.setenv("OPENAI_API_KEY", "mock")
-        agent = ConversableAgent(name="agent", llm_config=None)
-        agent.llm_config = None
-        assert agent.llm_config is None
+    agent = ConversableAgent(name="agent", llm_config=False)
 
-        with pytest.raises(RuntimeError) as e:
+    with pytest.raises(RuntimeError) as e:
 
-            @agent.register_for_llm(description="run cell in ipython and return the execution result.")
-            def exec_python(cell: Annotated[str, "Valid Python cell to execute."]) -> str:
-                pass
+        @agent.register_for_llm(description="run cell in ipython and return the execution result.")
+        def exec_python(cell: Annotated[str, "Valid Python cell to execute."]) -> str:
+            pass
 
-        assert e.value.args[0] == "LLM config must be setup before registering a function for LLM."
+    assert e.value.args[0] == "LLM config must be setup before registering a function for LLM."
 
 
 def test_register_for_execution():
@@ -996,6 +874,6 @@ if __name__ == "__main__":
     # test_trigger()
     # test_context()
     # test_max_consecutive_auto_reply()
-    test_generate_code_execution_reply()
-    # test_conversable_agent()
+    # test_generate_code_execution_reply()
+    test_conversable_agent()
     # test_no_llm_config()

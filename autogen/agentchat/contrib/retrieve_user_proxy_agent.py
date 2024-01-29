@@ -14,12 +14,7 @@ from autogen import logger
 from typing import Callable, Dict, Optional, Union, List, Tuple, Any
 from IPython import get_ipython
 
-try:
-    from termcolor import colored
-except ImportError:
-
-    def colored(x, *args, **kwargs):
-        return x
+from autogen.tty_utils import colored
 
 
 PROMPT_DEFAULT = """You're a retrieve augmented chatbot. You answer user's questions based on your own knowledge and the
@@ -319,7 +314,7 @@ class RetrieveUserProxyAgent(UserProxyAgent):
         if config is None:
             config = self
         if messages is None:
-            messages = self._oai_messages[sender]
+            messages = self._message_store.oai_messages[sender]
         message = messages[-1]
         update_context_case1, update_context_case2 = self._check_update_context(message)
         if (update_context_case1 or update_context_case2) and self.update_context:

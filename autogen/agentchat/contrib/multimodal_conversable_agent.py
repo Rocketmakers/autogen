@@ -4,13 +4,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 from autogen import OpenAIWrapper
 from autogen.agentchat import Agent, ConversableAgent
 from autogen.agentchat.contrib.img_utils import gpt4v_formatter
-
-try:
-    from termcolor import colored
-except ImportError:
-
-    def colored(x, *args, **kwargs):
-        return x
+from autogen.tty_utils import colored
 
 
 from autogen.code_utils import content_str
@@ -61,8 +55,8 @@ class MultimodalConversableAgent(ConversableAgent):
         Args:
             system_message (str): system message for the OpenAIWrapper inference.
         """
-        self._oai_system_message[0]["content"] = self._message_to_dict(system_message)["content"]
-        self._oai_system_message[0]["role"] = "system"
+        self._llm._oai_system_messages[0]["content"] = self._message_to_dict(system_message)["content"]
+        self._llm._oai_system_messages[0]["role"] = "system"
 
     @staticmethod
     def _message_to_dict(message: Union[Dict, List, str]) -> Dict:
